@@ -1,6 +1,6 @@
 docopt==0.6.2
 dulwich==0.20.24
-gitpython==3.1.18
+gitpython==3.1.30
 pylint==2.11.1
 requests==2.26.0
 pytest==6.2.5
