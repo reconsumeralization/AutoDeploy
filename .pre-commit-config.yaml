@@ -1,13 +1,13 @@
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+  - repo: local
     hooks:
-    -   id: trailing-whitespace
-    -   id: end-of-file-fixer
-    -   id: check-yaml
-    -   id: check-xml
-    -   id: check-added-large-files
-    -   id: detect-private-key
-    -   id: debug-statements
-    -   id: check-case-conflict
-    -   id: check-executables-have-shebangs
+      - id: check-broken-symlinks
+        name: Check for broken symlinks
+        entry: custom-hooks/check-broken-symlinks
+        language: system
+        types: [file]
+      - id: check-docstring-length
+        name: Check docstring length
+        entry: custom-hooks/check-docstring-length
+        language: system
+        types: [file]
