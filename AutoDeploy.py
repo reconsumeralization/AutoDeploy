@@ -6,101 +6,169 @@ import requests
 import difflib
 import subprocess
 import unittest
+import json
+import re
+import threading
+from typing import Any, Dict, List, Tuple, Optional
+
+# --- Enhancement 2: Logging configuration
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# --- Enhancement 7: Parameterize API URLs
+GITHUB_API_URL = os.environ.get('GITHUB_API_URL', 'https://api.github.com')
+PYPI_API_URL = os.environ.get('PYPI_API_URL', 'https://pypi.org/pypi')
 
 class AutomateDeployment:
-    def __init__(self, combined_library):
+    """
+    Handles automated deployment, library analysis, and crediting.
+    Now supports type hints, logging, config files, dependency injection, and parallel operations.
+    """
+    # --- Enhancement 1, 5, 6: Type hints, config file, and dependency injection
+    def __init__(
+        self,
+        combined_library: str,
+        config_path: Optional[str] = None,
+        requests_lib: Any = requests,
+        git_lib: Any = git
+    ) -> None:
         self.combined_library = combined_library
-        self.library_log = {}
+        self.requests = requests_lib
+        self.git = git_lib
+        self.library_log: Dict[str, int] = {}
+        self.config = self.load_config(config_path) if config_path else {}
 
-    def deploy(self):
-        # Deploy the combined library
-        print(f"Deploying {self.combined_library}...")
-        # Deployment logic goes here
+    def load_config(self, path: Optional[str]) -> dict:
+        """Load configuration from a JSON file."""
+        if not path:
+            return {}
+        try:
+            with open(path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not load config file: {e}")
+            return {}
 
-    def get_repos_libraries(self):
-        """Get the list of repos and libraries used in the code."""
-        repos = []
-        libraries = []
+    def deploy(self) -> None:
+        """Deploys the combined library (stub implementation)."""
+        logger.info(f"Deploying {self.combined_library}...")
+        # Deployment logic should go here
+
+    def get_repos_libraries(self) -> Tuple[List[str], List[str]]:
+        """
+        Get the list of repos and libraries used in the code.
+        Now normalizes names and avoids false positives.
+        """
+        repos: List[str] = []
+        libraries: List[str] = []
         for file in os.listdir('.'):
             if file.endswith('.py'):
-                with open(file, 'r') as f:
-                    for line in f:
-                        if 'import' in line:
-                            parts = line.split(' ')
-                            if len(parts) > 1:
-                                repo = parts[1].split('.')[0]
-                                repos.append(repo)
-                                libraries.append(line.strip())
+                try:
+                    with open(file, 'r') as f:
+                        for line in f:
+                            if 'import' in line:
+                                parts = line.strip().split()
+                                if len(parts) > 1:
+                                    repo = re.sub(r'\W+', '', parts[1].split('.')[0])
+                                    if repo:
+                                        repos.append(repo)
+                                    libraries.append(parts[1].split('.')[0])
+                except Exception as e:
+                    logger.error(f"Error reading {file}: {e}")
 
-        # Remove duplicate citations
+        # Remove duplicates
         repos = list(set(repos))
         libraries = list(set(libraries))
 
         return repos, libraries
 
-
-    def minimize_io_operations(self, code):
+    def minimize_io_operations(self, code: str) -> str:
         """Minimize unnecessary I/O operations in the code."""
-        optimized_code = code.replace("open('file.txt'", "open('cached_file.txt'")  # Replace file I/O with cached data
-        return optimized_code
+        return code.replace("open('file.txt'", "open('cached_file.txt'")
 
-    def auto_credit(self, repos, libraries):
-        """Auto credit all repos and libraries used in the code."""
+    def auto_credit(self, repos: List[str], libraries: List[str]) -> None:
+        """
+        Auto credit all repos and libraries used in the code.
+        Now uses threading for parallel operations.
+        """
+        threads = []
         for repo in repos:
-            response = requests.get(f'https://api.github.com/repos/{repo}')
-            if response.status_code == 200:
-                repo_data = response.json()
-                print(f'Crediting repo: {repo_data["full_name"]}')
-                self.fork_and_comment(repo_data)
-            else:
-                print(f'Failed to credit repo {repo}')
+            t = threading.Thread(target=self.credit_repo, args=(repo,))
+            t.start()
+            threads.append(t)
         for library in libraries:
-            response = requests.get(f'https://pypi.org/project/{library}')
-            if response.status_code == 200:
-                library_data = response.json()
-                print(f'Crediting library: {library_data["info"]["name"]}')
-                self.log_library_usage(library_data["info"]["name"])  # Log library usage
+            t = threading.Thread(target=self.credit_library, args=(library,))
+            t.start()
+            threads.append(t)
+        for t in threads:
+            t.join()
+
+    def credit_repo(self, repo: str) -> None:
+        """Helper for auto_credit: credits a single repo with error handling."""
+        api_url = f'{GITHUB_API_URL}/repos/{repo}'
+        try:
+            response = self.requests.get(api_url)
+            response.raise_for_status()
+            repo_data = response.json()
+            logger.info(f'Crediting repo: {repo_data["full_name"]}')
+            self.fork_and_comment(repo_data)
+        except Exception as e:
+            logger.error(f'Failed to credit repo {repo}: {e}')
+
+    def credit_library(self, library: str) -> None:
+        """Helper for auto_credit: credits a single library with error handling."""
+        api_url = f'{PYPI_API_URL}/{library}/json'
+        try:
+            response = self.requests.get(api_url)
+            response.raise_for_status()
+            library_data = response.json()
+            logger.info(f'Crediting library: {library_data["info"]["name"]}')
+            self.log_library_usage(library_data["info"]["name"])
+        except Exception as e:
+            logger.error(f'Failed to credit library {library}: {e}')
+
+    def fork_and_comment(self, repo_data: dict) -> None:
+        """
+        Forks the repository and adds comments according to the license type,
+        with error handling and logging.
+        """
+        try:
+            # Fork the repository
+            fork_url = f'{GITHUB_API_URL}/repos/{repo_data["full_name"]}/forks'
+            response = self.requests.post(fork_url)
+            if response.status_code == 202:
+                logger.info(f'Repo forked: {repo_data["full_name"]}')
             else:
-                print(f'Failed to credit library {library}')
+                logger.error(f'Failed to fork repo {repo_data["full_name"]}: {response.status_code}')
 
-    def fork_and_comment(self, repo_data):
-        """Forks the repository and adds comments according to the license type."""
-        # Fork the repository
-        fork_url = f'https://api.github.com/repos/{repo_data["full_name"]}/forks'
-        response = requests.post(fork_url)
-        if response.status_code == 202:
-            print(f'Repo forked: {repo_data["full_name"]}')
-        else:
-            print(f'Failed to fork repo {repo_data["full_name"]}')
-
-        # Get the license type
-        license_url = f'https://api.github.com/repos/{repo_data["full_name"]}/license'
-        response = requests.get(license_url)
-        if response.status_code == 200:
-            license_data = response.json()
-            license_type = license_data["license"]["spdx_id"]
-        else:
+            # Get the license type
+            license_url = f'{GITHUB_API_URL}/repos/{repo_data["full_name"]}/license'
+            response = self.requests.get(license_url)
             license_type = None
-
-        # Add comments according to the license type
-        if license_type:
-            if license_type == 'MIT':
-                comment = 'This library is used under the MIT license.'
-            elif license_type == 'Apache-2.0':
-                comment = 'This library is used under the Apache License 2.0.'
+            if response.status_code == 200:
+                license_data = response.json()
+                license_type = license_data.get("license", {}).get("spdx_id")
+            # Add comments according to the license type
+            if license_type:
+                if license_type == 'MIT':
+                    comment = 'This library is used under the MIT license.'
+                elif license_type == 'Apache-2.0':
+                    comment = 'This library is used under the Apache License 2.0.'
+                else:
+                    comment = f'This library is used under the {license_type} license.'
             else:
-                comment = f'This library is used under the {license_type} license.'
-        else:
-            comment = 'This library is used without a specified license.'
+                comment = 'This library is used without a specified license.'
 
-        comment_url = f'https://api.github.com/repos/{repo_data["full_name"]}/comments'
-        response = requests.post(comment_url, json={'body': comment})
-        if response.status_code == 201:
-            print(f'Comment added to repo: {repo_data["full_name"]}')
-        else:
-            print(f'Failed to add comment to repo {repo_data["full_name"]}')
+            comment_url = f'{GITHUB_API_URL}/repos/{repo_data["full_name"]}/comments'
+            response = self.requests.post(comment_url, json={'body': comment})
+            if response.status_code == 201:
+                logger.info(f'Comment added to repo: {repo_data["full_name"]}')
+            else:
+                logger.error(f'Failed to add comment to repo {repo_data["full_name"]}: {response.status_code}')
+        except Exception as e:
+            logger.error(f"Error in fork_and_comment for {repo_data.get('full_name')}: {e}")
 
-    def log_library_usage(self, library_name):
+    def log_library_usage(self, library_name: str) -> None:
         """Logs the usage of a library and monitors duplicates."""
         if library_name not in self.library_log:
             self.library_log[library_name] = 1
@@ -108,9 +176,10 @@ class AutomateDeployment:
             self.library_log[library_name] += 1
 
         if self.library_log[library_name] > 1:
-            print(f'Duplicate usage of library: {library_name}')
+            logger.warning(f'Duplicate usage of library: {library_name}')
 
-def remove_dead_code(code):
+# -- All standalone optimization functions get type annotations and docstrings
+def remove_dead_code(code: str) -> None:
     """Remove dead code segments from the provided code."""
     tree = ast.parse(code)
     tree.body = [node for node in tree.body if not (isinstance(node, ast.FunctionDef) and node.name == 'remove_dead_code')]
@@ -118,37 +187,40 @@ def remove_dead_code(code):
     compiled = compile(tree, filename='', mode='exec')
     exec(compiled, globals())
 
-def simplify_expressions(code):
+def simplify_expressions(code: str) -> str:
     """Simplify expressions within the code."""
     simplified_code = code.replace('1 + 1', '2')
     simplified_code = simplified_code.replace('2 * 5', '10')
     return simplified_code
 
-def use_efficient_data_structures(code):
+def use_efficient_data_structures(code: str) -> str:
     """Optimize data structures and algorithms used in the code."""
-    optimized_code = code.replace('list(set(', 'set(')  # Use set instead of list(set(...)) for duplicate removal
+    optimized_code = code.replace('list(set(', 'set(')
     return optimized_code
 
-def minimize_io_operations(code):
+def minimize_io_operations(code: str) -> str:
     """Minimize unnecessary I/O operations in the code."""
-    optimized_code = code.replace('open(file)', 'cached_file')  # Replace file I/O with cached data
+    optimized_code = code.replace('open(file)', 'cached_file')
     return optimized_code
 
-def utilize_builtin_functions(code):
+def utilize_builtin_functions(code: str) -> str:
     """Utilize built-in functions and libraries for optimized functionality."""
-    optimized_code = code.replace('custom_function()', 'built_in_function()')  # Replace custom function with built-in equivalent
+    optimized_code = code.replace('custom_function()', 'built_in_function()')
     return optimized_code
 
-def employ_caching_techniques(code):
+def employ_caching_techniques(code: str) -> str:
     """Employ caching mechanisms to store and reuse intermediate results."""
-    optimized_code = code.replace('compute_expensive_operation()', 'cached_result')  # Replace computation with cached result
+    optimized_code = code.replace('compute_expensive_operation()', 'cached_result')
     return optimized_code
 
-def profile_and_benchmark(code):
+def profile_and_benchmark(code: str) -> str:
     """Profile and benchmark critical sections of the code for performance optimization."""
-    profiled_code = code  # Profile and optimize critical sections of the code
+    profiled_code = code
     return profiled_code
 
+# --- All docstrings expanded, logging used, config/deps injected, etc. ---
+
+# --- Tests remain, but now benefit from improved main class
 class TestCodeOptimization(unittest.TestCase):
     def test_remove_dead_code(self):
         code = '''def remove_dead_code():
@@ -156,50 +228,42 @@ class TestCodeOptimization(unittest.TestCase):
 
 def test_function():
     print("This is a test function")'''
-
         expected_code = '''def test_function():
     print("This is a test function")'''
-
         remove_dead_code(code)
         self.assertEqual(code.strip(), expected_code.strip())
 
     def test_simplify_expressions(self):
         code = '''x = 1 + 1
 y = 2 * 5'''
-
         expected_code = '''x = 2
 y = 10'''
-
         simplified_code = simplify_expressions(code)
         self.assertEqual(simplified_code.strip(), expected_code.strip())
 
     def test_use_efficient_data_structures(self):
         code = '''data = list(set([1, 2, 3, 3, 4, 5]))'''
-
         expected_code = '''data = set([1, 2, 3, 4, 5])'''
-
         optimized_code = use_efficient_data_structures(code)
         self.assertEqual(optimized_code.strip(), expected_code.strip())
 
-
+    def test_minimize_io_operations(self):
+        code = '''data = open(file)
 # Perform operations on contents'''
-
+        expected_code = '''data = cached_file
+# Perform operations on contents'''
         optimized_code = minimize_io_operations(code)
         self.assertEqual(optimized_code.strip(), expected_code.strip())
 
     def test_utilize_builtin_functions(self):
         code = '''custom_function()'''
-
         expected_code = '''built_in_function()'''
-
         optimized_code = utilize_builtin_functions(code)
         self.assertEqual(optimized_code.strip(), expected_code.strip())
 
     def test_employ_caching_techniques(self):
         code = '''result = compute_expensive_operation()'''
-
         expected_code = '''result = cached_result'''
-
         optimized_code = employ_caching_techniques(code)
         self.assertEqual(optimized_code.strip(), expected_code.strip())
 
@@ -207,9 +271,7 @@ y = 10'''
         code = '''# Critical section of code
 for i in range(1000000):
     pass'''
-
         expected_code = code  # Placeholder for actual profiling and optimization
-
         profiled_code = profile_and_benchmark(code)
         self.assertEqual(profiled_code.strip(), expected_code.strip())
 
