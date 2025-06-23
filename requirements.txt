@@ -7,7 +7,6 @@ pytest==6.2.5
 black==21.7b0
 flake8==4.0.1
 dulwich==0.20.24
-restyled/snyk-fix-0e4d37e5b92c6af678b3e0e99f08e2a1
 zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
 setuptools>=78.1.1 # not directly required, pinned by Snyk to avoid a vulnerability
 urllib3>=2.5.0 # not directly required, pinned by Snyk to avoid a vulnerability
