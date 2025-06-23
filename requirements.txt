@@ -8,3 +8,4 @@ black==21.7b0
 flake8==4.0.1
 dulwich==0.20.24
 setuptools>=78.1.1 # not directly required, pinned by Snyk to avoid a vulnerability
+urllib3>=2.5.0 # not directly required, pinned by Snyk to avoid a vulnerability
