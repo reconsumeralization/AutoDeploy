@@ -49,12 +49,20 @@ To use AutoDeploy, ensure that you have the following software installed:
 2. Run the AutoDeploy script. Open a terminal or command prompt and navigate to the AutoDeploy directory. Execute the following command:
 
    ```shell
-   python automate_deployment.py
+   python AutoDeploy.py
    ```
 
 3. Follow the prompts and provide the necessary information for the deployment process. The script will guide you through the integration, optimization, and deployment steps.
 
 4. AutoDeploy will analyze the code, optimize it using various techniques, credit the repositories and libraries used, and deploy the final combined library.
+
+### Running Tests
+
+After making changes, run the unit tests using `pytest`:
+
+```shell
+pytest -q
+```
 
 ## Contributing
 
