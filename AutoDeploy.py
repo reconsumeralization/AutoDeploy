@@ -1,8 +1,20 @@
 import os
-import git
+try:
+    import git
+except ImportError:  # pragma: no cover - optional dependency
+    git = None
 import logging
 import ast
+<<<<<<< codex/review-and-improve-code
 import requests
+=======
+try:
+    import requests
+except ImportError:  # pragma: no cover - optional dependency
+    requests = None
+import difflib
+import subprocess
+>>>>>>> main
 import unittest
 import json
 import re
@@ -205,7 +217,7 @@ def simplify_expressions(code: str) -> str:
 
 def use_efficient_data_structures(code: str) -> str:
     """Optimize data structures and algorithms used in the code."""
-    optimized_code = code.replace('list(set(', 'set(')
+    optimized_code = re.sub(r"list\(set\(([^)]+)\)\)", r"set(\1)", code)
     return optimized_code
 
 def minimize_io_operations(code: str) -> str:
