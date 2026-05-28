@@ -1,5 +1,5 @@
 docopt==0.6.2
-dulwich==0.20.24
+dulwich==1.2.5
 gitpython==3.1.41
 pylint==2.11.1
 requests==2.32.4
